@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	corev1 "k8s.io/api/core/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -104,7 +105,7 @@ func (c *Controller) syncDeployment(ns, name string) error {
 			Namespace: ns,
 		},
 		Spec: corev1.ServiceSpec{
-			Type: "ClusterIP",
+			Type: "LoadBalancer",
 			Selector: depLabels(*dep),
 			Ports: []corev1.ServicePort{
 				{
@@ -114,14 +115,58 @@ func (c *Controller) syncDeployment(ns, name string) error {
 			},
 		},
 	}
-	_, err = c.clientset.CoreV1().Services(ns).Create(ctx, &svc, metav1.CreateOptions{})
+	s, err := c.clientset.CoreV1().Services(ns).Create(ctx, &svc, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+
+	//create ingress
+	return createIngress(ctx, c.clientset, s)
+}
+
+func createIngress(ctx context.Context, clientset kubernetes.Interface, svc *corev1.Service) error {
+	pathType := "Prefix"
+	ingress := networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: svc.Name,
+			Namespace: svc.Namespace,
+			Annotations: map[string]string{
+				"nginx.ingress.kubernetes.io/rewrite-target":"/",
+			},
+		},
+		Spec: networkingv1.IngressSpec{
+			Rules: []networkingv1.IngressRule{
+				{
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: []networkingv1.HTTPIngressPath{
+								{
+									Path: fmt.Sprintf("/%s", svc.Name),
+									PathType: (*networkingv1.PathType)(&pathType),
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: svc.Name,
+											Port: networkingv1.ServiceBackendPort{
+												Number: 80,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+												
+
+		},
+	}
+	_, err := clientset.NetworkingV1().Ingresses(svc.Namespace).Create(ctx, &ingress, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
 	return nil
-
-	//create ingress
-}
+} 
 
 func depLabels(dep appsv1.Deployment) map[string]string {
 	return dep.Spec.Template.Labels
