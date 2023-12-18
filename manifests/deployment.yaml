@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: kube-expose
+  name: kube-expose
+  namespace: kube-expose
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-expose
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: kube-expose
+    spec:
+      containers:
+      - image: nishanthvish/kube-expose:0.1.4
+        name: kube-expose
+        resources: {}
+status: {}

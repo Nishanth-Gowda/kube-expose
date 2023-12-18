@@ -15,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apiErr "k8s.io/apimachinery/pkg/api/errors"
 )
 
 type Controller struct {
@@ -79,6 +80,29 @@ func (c *Controller) processItem() bool {
 	if err != nil {
 		fmt.Printf("Error splitting key %s\n", err.Error())
 		return false
+	}
+
+	// check if the object has been deleted from the API Server by querying API Server.
+	ctx := context.Background()
+	_, err = c.clientset.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
+	// if the object is not found, it has been deleted from the API Server.
+	if apiErr.IsNotFound(err) {
+		fmt.Printf("Deployment %s has been deleted\n", name)
+
+		fmt.Printf("Deleting service %s\n", name)
+
+		// delete the service created
+		err := c.clientset.CoreV1().Services(ns).Delete(ctx, name, metav1.DeleteOptions{})
+		if err != nil {
+			fmt.Printf("Error deleting service %s\n", err.Error())
+		}
+
+		// delete ingress
+		err = c.clientset.NetworkingV1().Ingresses(ns).Delete(ctx, name, metav1.DeleteOptions{})
+		if err != nil {
+			fmt.Printf("Error deleting ingress %s\n", err.Error())
+		}
+		return true
 	}
 	
 	err = c.syncDeployment(ns, name)
