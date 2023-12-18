@@ -19,7 +19,7 @@ spec:
         app: kube-expose
     spec:
       containers:
-      - image: nishanthvish/kube-expose:0.1.4
+      - image: nishanthvish/kube-expose:0.1.5
         name: kube-expose
         resources: {}
 status: {}

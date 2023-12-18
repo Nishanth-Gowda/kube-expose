@@ -95,12 +95,16 @@ func (c *Controller) processItem() bool {
 		err := c.clientset.CoreV1().Services(ns).Delete(ctx, name, metav1.DeleteOptions{})
 		if err != nil {
 			fmt.Printf("Error deleting service %s\n", err.Error())
+			return false
 		}
+
+		fmt.Printf("Deleting ingress %s\n", name)
 
 		// delete ingress
 		err = c.clientset.NetworkingV1().Ingresses(ns).Delete(ctx, name, metav1.DeleteOptions{})
 		if err != nil {
 			fmt.Printf("Error deleting ingress %s\n", err.Error())
+			return false
 		}
 		return true
 	}
