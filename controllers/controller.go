@@ -25,6 +25,8 @@ type Controller struct {
 	queue               workqueue.RateLimitingInterface
 }
 
+// NewController creates a new Controller instance
+// It initializes the kubernetes client, informers, listers, queue and sync handles
 func NewController(clientset kubernetes.Interface, deploymentInformer appinformers.DeploymentInformer) *Controller {
 	c := &Controller{
 		clientset:           clientset,
@@ -43,6 +45,10 @@ func NewController(clientset kubernetes.Interface, deploymentInformer appinforme
 	return c
 }
 
+// Run starts the control loops to actually run the reconciliation logic
+// 1. Wait for cache sync
+// 2. Start worker goroutine
+// 3. Block on stop channel
 func (c *Controller) Run(stopCh <-chan struct{}) {
 	fmt.Println("=======Starting controller========")
 	if !cache.WaitForCacheSync(stopCh, c.deploymentCacheSync) {
@@ -57,12 +63,19 @@ func (c *Controller) Run(stopCh <-chan struct{}) {
 
 }
 
+// worker processes items from the work queue
+// Calls processItem in a loop until shutdown
 func (c *Controller) worker() {
 	for c.processItem() {
 
 	}
 }
 
+// processItem is the core reconciliation logic
+// 1. Get item from queue safely
+// 2. Get namespace and name
+// 3. Check if deleted
+// 4. Call either cleanup logic or sync logic
 func (c *Controller) processItem() bool {
 	item, shutdown := c.queue.Get()
 	if shutdown {
@@ -117,6 +130,10 @@ func (c *Controller) processItem() bool {
 	return true
 }
 
+// syncDeployment ensures Service and Ingress exist
+// 1. Get Deployment
+// 2. Create Service
+// 3. Create Ingress for Service
 func (c *Controller) syncDeployment(ns, name string) error {
 
 	dep, err := c.deploymentLister.Deployments(ns).Get(name)
@@ -152,6 +169,8 @@ func (c *Controller) syncDeployment(ns, name string) error {
 	return createIngress(ctx, c.clientset, s)
 }
 
+// createIngress creates Ingress resource
+// Exposes a Service created for Deployment pods
 func createIngress(ctx context.Context, clientset kubernetes.Interface, svc *corev1.Service) error {
 	pathType := "Prefix"
 	ingress := networkingv1.Ingress{
@@ -196,17 +215,22 @@ func createIngress(ctx context.Context, clientset kubernetes.Interface, svc *cor
 	return nil
 } 
 
+// depLabels helper to get pod labels from Deployment
+// Needed for setting Service selectors
 func depLabels(dep appsv1.Deployment) map[string]string {
 	return dep.Spec.Template.Labels
 }
 
-
+// HandleAdd event handler for Deployment add
+// Adds object to work queue
 func (c *Controller) HandleAdd(obj interface{}) {
 	fmt.Println("Add was called")
 	c.queue.Add(obj)
 
 }
 
+// HandleDelete event handler for Deployment delete
+// Adds object to queue for delete handling
 func (c *Controller) HandleDelete(obj interface{}) {
 	fmt.Println("Delete was called")
 	c.queue.Add(obj)
